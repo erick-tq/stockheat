@@ -1,0 +1,13 @@
+{
+  "name": "stockheat",
+  "version": "2.0.0",
+  "description": "板块ETF热度雷达 - 实时社交媒体情绪监控",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "share": "bash share.sh"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
