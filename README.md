@@ -75,7 +75,7 @@ StockHeat 是一个**实时股票板块热度监控工具**，通过聚合抖音
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/你的用户名/stockheat.git
+git clone https://github.com/erick-tq/stockheat.git
 cd stockheat
 
 # 2. 安装依赖
@@ -185,4 +185,4 @@ MIT — 随便用，随便改，随便商用。
 
 ---
 
-Built with ❤️ for A-stock investors.
+Built with ❤️ by [erick-tq](https://github.com/erick-tq)
