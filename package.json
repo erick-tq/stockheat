@@ -1,8 +1,10 @@
 {
   "name": "stockheat",
   "version": "2.0.0",
-  "description": "板块ETF热度雷达 - 实时社交媒体情绪监控",
+  "description": "板块ETF热度雷达 - 实时社交媒体情绪+行情数据融合",
   "main": "server.js",
+  "author": "erick-tq",
+  "license": "MIT",
   "scripts": {
     "start": "node server.js",
     "share": "bash share.sh"
