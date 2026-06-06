@@ -9,6 +9,10 @@
     "start": "node server.js",
     "share": "bash share.sh"
   },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  },
   "engines": {
     "node": ">=18.0.0"
   }
