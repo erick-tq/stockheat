@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StockHeat - 板块ETF热度雷达</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+
+  :root {
+    --bg-primary: #06060d;
+    --bg-secondary: #0c0c16;
+    --bg-card: #111118;
+    --bg-card-hover: #181824;
+    --border: #1a1a2a;
+    --border-active: #2a2a42;
+    --text-primary: #e4e4ec;
+    --text-secondary: #8888a4;
+    --text-muted: #4a4a5e;
+    --accent-green: #00e676;
+    --accent-red: #ff3d5a;
+    --accent-cyan: #00e0ff;
+    --accent-purple: #b388ff;
+    --accent-orange: #ff9100;
+    --accent-yellow: #ffd740;
+    --heat-cold: #448aff;
+    --heat-warm: #ff6d00;
+    --heat-hot: #ff1744;
+    --xhs-color: #ff2442;
+    --dy-color: #00f2fe;
+    --wb-color: #ff8200;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'Noto Sans SC', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 800px 600px at 15% 0%, rgba(0, 224, 255, 0.04) 0%, transparent 60%),
+      radial-gradient(ellipse 600px 800px at 85% 30%, rgba(179, 136, 255, 0.03) 0%, transparent 60%),
+      radial-gradient(ellipse 700px 500px at 50% 80%, rgba(0, 230, 118, 0.03) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .grid-bg {
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+    background-size: 64px 64px;
+    pointer-events: none; z-index: 0;
+  }
+
+  .container { max-width:1480px; margin:0 auto; padding:20px 24px 40px; position:relative; z-index:1; }
+
+  /* Header */
+  .header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 0 20px; border-bottom:1px solid var(--border);
+    margin-bottom:20px; flex-wrap:wrap; gap:16px;
+  }
+  .logo { display:flex; align-items:center; gap:14px; }
+  .logo-icon {
+    width:44px; height:44px;
+    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+    border-radius:13px; display:flex; align-items:center; justify-content:center;
+    font-size:22px; box-shadow: 0 0 24px rgba(0,224,255,0.25);
+    position:relative; overflow:hidden;
+  }
+  .logo-icon::after {
+    content:''; position:absolute; inset:0;
+    background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.15));
+  }
+  .logo-text {
+    font-family: 'Geist Mono', 'Noto Sans SC', monospace;
+    font-size:24px; font-weight:700; letter-spacing:-1px;
+    background: linear-gradient(135deg, var(--text-primary) 20%, var(--accent-cyan));
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  }
+  .logo-sub { font-size:11px; color:var(--text-muted); letter-spacing:2.5px; text-transform:uppercase; }
+
+  .market-ticker { display:flex; gap:12px; flex-wrap:wrap; }
+  .ticker-item {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 16px; background:var(--bg-card);
+    border-radius:10px; border:1px solid var(--border);
+    font-family:'Geist Mono', monospace; font-size:13px;
+    transition: all 0.25s; cursor:default;
+  }
+  .ticker-item:hover { border-color:var(--border-active); background:var(--bg-card-hover); }
+  .ticker-name { color:var(--text-secondary); font-size:11px; }
+  .ticker-price { font-weight:700; font-size:15px; }
+  .ticker-change { font-size:12px; padding:3px 8px; border-radius:5px; font-weight:600; }
+  .ticker-change.up { color:var(--accent-green); background:rgba(0,230,118,0.1); }
+  .ticker-change.down { color:var(--accent-red); background:rgba(255,61,90,0.1); }
+
+  /* Status Bar */
+  .status-bar {
+    display:flex; align-items:center; gap:14px;
+    padding:10px 18px; background:var(--bg-card);
+    border-radius:10px; border:1px solid var(--border);
+    font-size:12px; margin-bottom:22px; flex-wrap:wrap;
+  }
+  .status-dot { width:8px; height:8px; border-radius:50%; background:var(--accent-green); animation:pulse 2s infinite; box-shadow:0 0 8px var(--accent-green); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+  .status-label { color:var(--text-secondary); }
+  .status-value { color:var(--text-primary); font-family:'Geist Mono',monospace; }
+  .status-sep { color:var(--text-muted); }
+
+  /* Platform Summary */
+  .platform-summary { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:14px; margin-bottom:22px; }
+  .platform-card {
+    position:relative; background:var(--bg-card);
+    border:1px solid var(--border); border-radius:14px;
+    padding:20px; overflow:hidden; transition:all 0.3s;
+    cursor:pointer;
+  }
+  .platform-card:hover { border-color:var(--border-active); background:var(--bg-card-hover); transform:translateY(-2px); }
+  .platform-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+  .platform-card.xhs::before { background:linear-gradient(90deg, var(--xhs-color), #ff6b81); }
+  .platform-card.douyin::before { background:linear-gradient(90deg, var(--dy-color), #4facfe); }
+  .platform-card.weibo::before { background:linear-gradient(90deg, var(--wb-color), #ffb940); }
+  .platform-card.aggregate::before { background:linear-gradient(90deg, var(--accent-purple), var(--accent-cyan)); }
+  .platform-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .platform-name { font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px; }
+  .platform-icon { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .platform-count { font-family:'Geist Mono',monospace; font-size:12px; color:var(--text-secondary); }
+  .platform-metrics { display:flex; gap:18px; margin-bottom:12px; }
+  .metric-item { flex:1; }
+  .metric-label { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; }
+  .metric-value { font-family:'Geist Mono',monospace; font-size:15px; font-weight:600; }
+  .metric-value.h3 { color:var(--heat-hot); }
+  .metric-value.h2 { color:var(--heat-warm); }
+  .metric-value.h1 { color:var(--heat-cold); }
+  .platform-trends { display:flex; gap:6px; flex-wrap:wrap; }
+  .trend-tag {
+    font-size:10px; padding:3px 9px; border-radius:4px;
+    background:rgba(255,255,255,0.04); color:var(--text-secondary);
+    border:1px solid rgba(255,255,255,0.06); white-space:nowrap;
+  }
+  .trend-tag.hot { color:var(--accent-red); background:rgba(255,61,90,0.1); border-color:rgba(255,61,90,0.2); }
+
+  /* Section Title */
+  .section-title {
+    font-size:16px; font-weight:700; margin-bottom:16px;
+    display:flex; align-items:center; gap:10px; letter-spacing:0.5px;
+  }
+  .section-title::before {
+    content:''; width:4px; height:20px;
+    background:var(--accent-cyan); border-radius:2px;
+  }
+
+  /* Table */
+  /* Filter Bar */
+  .filter-bar {
+    display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;
+  }
+  .filter-btn {
+    padding:7px 16px; border-radius:8px; border:1px solid var(--border);
+    background:var(--bg-card); color:var(--text-secondary);
+    font-size:12px; font-family:'Noto Sans SC', sans-serif; cursor:pointer;
+    transition:all 0.2s; white-space:nowrap;
+  }
+  .filter-btn:hover { border-color:var(--border-active); color:var(--text-primary); background:var(--bg-card-hover); }
+  .filter-btn.active { border-color:var(--accent-cyan); color:var(--accent-cyan); background:rgba(0,224,255,0.08); box-shadow:0 0 12px rgba(0,224,255,0.12); }
+  .filter-btn .count { font-family:'Geist Mono',monospace; font-size:11px; margin-left:4px; opacity:0.7; }
+
+  /* 宝妈指数 */
+  .mom-index-card {
+    background: linear-gradient(135deg, rgba(255,105,180,0.06), rgba(255,182,193,0.04), rgba(255,215,0,0.03));
+    border: 1px solid rgba(255,105,180,0.2);
+    border-radius: 16px; padding: 20px 24px; margin-bottom: 22px;
+    position: relative; overflow: hidden;
+  }
+  .mom-index-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, #ff69b4, #ffb6c1, #ffd700, #ff69b4);
+    animation: momShimmer 3s ease-in-out infinite;
+  }
+  @keyframes momShimmer {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+  .mom-header {
+    display: flex; align-items: center; gap: 14px; margin-bottom: 16px;
+  }
+  .mom-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: linear-gradient(135deg, #ff69b4, #ffb6c1);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; box-shadow: 0 0 20px rgba(255,105,180,0.25);
+  }
+  .mom-title {
+    font-size: 17px; font-weight: 700; letter-spacing: 0.5px;
+    background: linear-gradient(135deg, #ff69b4, #ffb6c1, #ffd700);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .mom-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .mom-score {
+    margin-left: auto; font-family: 'Geist Mono', monospace;
+    font-size: 36px; font-weight: 700;
+    background: linear-gradient(135deg, #ff69b4, #ffb6c1, #ffd700);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .mom-sectors {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px;
+  }
+  .mom-sector-tag {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-radius: 10px;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+    font-size: 13px; transition: all 0.2s;
+  }
+  .mom-sector-tag:hover {
+    background: rgba(255,105,180,0.08); border-color: rgba(255,105,180,0.2);
+  }
+  .mom-sector-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .mom-sector-name { flex: 1; font-size: 12px; color: var(--text-secondary); }
+  .mom-sector-heat {
+    font-family: 'Geist Mono', monospace; font-size: 12px; font-weight: 600;
+  }
+  .mom-sector-arrow { font-size: 11px; }
+  .mom-signal {
+    margin-top: 14px; padding: 10px 16px;
+    background: rgba(255,105,180,0.06); border-radius: 10px;
+    border: 1px solid rgba(255,105,180,0.12);
+    font-size: 13px; display: flex; align-items: center; gap: 8px;
+  }
+
+  .table-container {
+    background:var(--bg-card); border:1px solid var(--border);
+    border-radius:14px; overflow:hidden; margin-bottom:22px;
+  }
+  .table-header {
+    display:grid;
+    grid-template-columns:52px 1.35fr 80px 105px 115px 72px 78px 95px;
+    padding:13px 22px; background:rgba(255,255,255,0.015);
+    border-bottom:1px solid var(--border);
+    font-size:11px; color:var(--text-muted);
+    text-transform:uppercase; letter-spacing:1px; font-weight:500;
+  }
+  .table-row {
+    display:grid;
+    grid-template-columns:52px 1.35fr 80px 105px 115px 72px 78px 95px;
+    padding:14px 22px; border-bottom:1px solid var(--border);
+    font-size:13px; align-items:center;
+    transition:all 0.2s; cursor:pointer; position:relative;
+  }
+  .table-row:hover { background:rgba(255,255,255,0.02); }
+  .table-row:last-child { border-bottom:none; }
+  .rank-num { font-family:'Geist Mono',monospace; font-size:15px; font-weight:700; color:var(--text-secondary); text-align:center; }
+  .rank-num.r1 { color:#ffd740; }
+  .rank-num.r2 { color:#bdbdbd; }
+  .rank-num.r3 { color:#ff8a65; }
+  .sector-name { font-weight:600; display:flex; align-items:center; gap:8px; }
+  .sector-name .etf-name { font-size:11px; color:var(--text-muted); font-weight:400; }
+  .sector-change { font-family:'Geist Mono',monospace; font-weight:600; }
+  .sector-change.pos { color:var(--accent-green); }
+  .sector-change.neg { color:var(--accent-red); }
+
+  .heat-cell { display:flex; align-items:center; gap:8px; }
+  .heat-bar { flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; }
+  .heat-bar-fill {
+    height:100%; border-radius:3px;
+    transition:width 0.6s cubic-bezier(0.4,0,0.2,1);
+  }
+  .heat-bar-fill.l5 { background:linear-gradient(90deg,#ff1744,#ff6d00); box-shadow:0 0 14px rgba(255,23,68,0.5); }
+  .heat-bar-fill.l4 { background:linear-gradient(90deg,#ff6d00,#ff9100); box-shadow:0 0 8px rgba(255,109,0,0.4); }
+  .heat-bar-fill.l3 { background:linear-gradient(90deg,#ff9100,#ffd740); }
+  .heat-bar-fill.l2 { background:linear-gradient(90deg,#ffd740,#76ff03); }
+  .heat-bar-fill.l1 { background:#448aff; }
+  .heat-score-val { font-family:'Geist Mono',monospace; font-size:14px; font-weight:700; min-width:44px; text-align:right; }
+  .heat-score-val.s5 { color:#ff1744; }
+  .heat-score-val.s4 { color:#ff6d00; }
+  .heat-score-val.s3 { color:#ff9100; }
+  .heat-score-val.s2 { color:#ffd740; }
+  .heat-score-val.s1 { color:#448aff; }
+
+  .sent-badge {
+    display:inline-block; padding:3px 9px; border-radius:4px;
+    font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;
+  }
+  .sent-badge.bullish { color:var(--accent-green); background:rgba(0,230,118,0.1); border:1px solid rgba(0,230,118,0.2); }
+  .sent-badge.bearish { color:var(--accent-red); background:rgba(255,61,90,0.1); border:1px solid rgba(255,61,90,0.2); }
+  .sent-badge.neutral { color:var(--text-secondary); background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); }
+
+  .signal-cell { display:flex; align-items:center; gap:8px; }
+  .signal-dot { width:10px; height:10px; border-radius:50%; }
+  .signal-dot.buy { background:var(--accent-green); box-shadow:0 0 10px rgba(0,230,118,0.5); animation:pulse 1.5s infinite; }
+  .signal-dot.sell { background:var(--accent-red); box-shadow:0 0 10px rgba(255,61,90,0.5); animation:pulse 1.5s infinite; }
+  .signal-dot.hold { background:var(--accent-yellow); box-shadow:0 0 8px rgba(255,215,64,0.4); }
+  .signal-dot.watch { background:var(--accent-cyan); box-shadow:0 0 8px rgba(0,224,255,0.4); }
+  .signal-label { font-size:12px; font-weight:600; }
+  .signal-label.buy { color:var(--accent-green); }
+  .signal-label.sell { color:var(--accent-red); }
+  .signal-label.hold { color:var(--accent-yellow); }
+  .signal-label.watch { color:var(--accent-cyan); }
+
+  .mention-dots { display:flex; gap:5px; }
+  .mdot { width:7px; height:7px; border-radius:50%; opacity:0.35; transition:opacity 0.3s; }
+  .mdot.on { opacity:1; }
+  .mdot.xh { background:var(--xhs-color); }
+  .mdot.dy { background:var(--dy-color); }
+  .mdot.wb { background:var(--wb-color); }
+
+  .data-tag {
+    display:inline-block;font-size:9px;padding:2px 6px;border-radius:3px;
+    font-weight:600;letter-spacing:0.3px;vertical-align:middle;margin-left:4px;
+  }
+  .data-tag.real{color:#00e676;background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.2);}
+  .data-tag.sim{color:#ff9100;background:rgba(255,145,0,0.08);border:1px solid rgba(255,145,0,0.15);}
+  .data-tag.mixed{color:#ffd740;background:rgba(255,215,64,0.08);border:1px solid rgba(255,215,64,0.15);}
+
+  .sim-hint{font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:4px;}
+  .sim-hint .dot{width:5px;height:5px;border-radius:50%;}
+  .sim-hint .dot.sim{background:#ff9100;}
+  .sim-hint .dot.real{background:#00e676;}
+
+  /* Detail Panel */
+  .detail-panel { display:grid; grid-template-columns:2fr 1fr; gap:14px; margin-bottom:22px; }
+  .detail-card {
+    background:var(--bg-card); border:1px solid var(--border);
+    border-radius:14px; padding:22px;
+  }
+  .detail-card-title {
+    font-size:13px; font-weight:600; color:var(--text-secondary);
+    margin-bottom:18px; text-transform:uppercase; letter-spacing:1px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .sentiment-chart { display:flex; align-items:flex-end; gap:3px; height:90px; padding:0 4px; }
+  .chart-col { display:flex; flex-direction:column; align-items:center; gap:2px; flex:1; }
+  .chart-bar { width:100%; border-radius:2px 2px 0 0; transition:height 0.5s; }
+  .chart-bar.positive { background:var(--accent-green); opacity:0.65; }
+  .chart-bar.negative { background:var(--accent-red); opacity:0.45; }
+  .hot-topics { display:flex; flex-direction:column; gap:9px; }
+  .ht-item {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 13px; background:rgba(255,255,255,0.015);
+    border-radius:8px; border:1px solid rgba(255,255,255,0.04);
+    transition:all 0.2s;
+  }
+  .ht-item:hover { background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.08); }
+  .ht-rank { font-family:'Geist Mono',monospace; font-size:13px; font-weight:700; color:var(--text-muted); width:22px; }
+  .ht-rank.hot { color:var(--accent-red); }
+  .ht-content { flex:1; font-size:13px; }
+  .ht-source { font-size:10px; padding:2px 7px; border-radius:3px; background:rgba(255,255,255,0.04); }
+  .ht-heat { font-family:'Geist Mono',monospace; font-size:13px; font-weight:600; color:var(--accent-orange); }
+
+  /* Detail Modal */
+  .modal-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,0.7);
+    display:flex; align-items:center; justify-content:center;
+    z-index:100; opacity:0; pointer-events:none; transition:opacity 0.3s;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.active { opacity:1; pointer-events:all; }
+  .modal {
+    background:var(--bg-card); border:1px solid var(--border-active);
+    border-radius:18px; padding:28px; max-width:600px; width:90%;
+    max-height:80vh; overflow-y:auto; position:relative;
+    box-shadow:0 24px 80px rgba(0,0,0,0.6);
+  }
+  .modal-close {
+    position:absolute; top:16px; right:16px;
+    width:32px; height:32px; border-radius:50%;
+    background:rgba(255,255,255,0.06); border:none;
+    color:var(--text-secondary); font-size:18px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:all 0.2s;
+  }
+  .modal-close:hover { background:rgba(255,255,255,0.12); color:var(--text-primary); }
+  .modal-sector-name { font-size:22px; font-weight:700; margin-bottom:6px; }
+  .modal-sector-code { font-size:13px; color:var(--text-muted); font-family:'Geist Mono',monospace; }
+  .modal-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:20px; }
+  .modal-stat {
+    padding:14px; background:rgba(255,255,255,0.02);
+    border-radius:10px; border:1px solid rgba(255,255,255,0.05);
+  }
+  .modal-stat-label { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; }
+  .modal-stat-value { font-size:18px; font-weight:700; font-family:'Geist Mono',monospace; margin-top:4px; }
+  .modal-platform-breakdown { margin-top:20px; }
+  .modal-platform-label { font-size:12px; color:var(--text-secondary); margin-bottom:10px; }
+  .modal-bar-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .modal-bar-label { font-size:12px; width:50px; }
+  .modal-bar-track { flex:1; height:8px; background:rgba(255,255,255,0.06); border-radius:4px; overflow:hidden; }
+  .modal-bar-fill { height:100%; border-radius:4px; transition:width 0.6s; }
+
+  /* Animations */
+  @keyframes flash-update { 0%{background:rgba(0,224,255,0.08)} 100%{background:transparent} }
+  .flash { animation:flash-update 0.8s ease-out; }
+  @keyframes slideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .slide-in { animation:slideIn 0.4s ease-out; }
+
+  ::-webkit-scrollbar { width:5px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+  @media (max-width:900px) {
+    .container { padding:12px; }
+    .table-header, .table-row { grid-template-columns:38px 1fr 62px 78px 80px 68px; padding:11px 14px; font-size:12px; }
+    .table-header>:nth-child(7),.table-row>:nth-child(7) { display:none; }
+    .table-header>:nth-child(8),.table-row>:nth-child(8) { display:none; }
+    .detail-panel { grid-template-columns:1fr; }
+    .platform-summary { grid-template-columns:1fr 1fr; }
+    .market-ticker { gap:8px; }
+    .ticker-item { padding:7px 12px; font-size:11px; }
+  }
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="container" id="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">📡</div>
+      <div>
+        <div class="logo-text">StockHeat</div>
+        <div class="logo-sub">Real-time Sector ETF Radar</div>
+      </div>
+    </div>
+    <div class="market-ticker" id="marketTicker"></div>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div class="status-dot"></div>
+    <span class="status-label">实时监控</span>
+    <span class="status-sep">|</span>
+    <span class="status-label">来源:</span>
+    <span class="status-value" style="color:var(--xhs-color)">小红书</span>
+    <span class="status-value" style="color:var(--dy-color)">抖音</span>
+    <span class="status-value" style="color:var(--wb-color)">微博</span>
+    <span class="status-sep">|</span>
+    <span class="status-label">刷新:</span>
+    <span class="status-value" id="updateCountdown">30s</span>
+    <span class="status-sep">|</span>
+    <span class="status-label">最近更新:</span>
+    <span class="status-value" id="lastUpdate">--:--:--</span>
+    <span class="status-sep">|</span>
+    <span class="status-label">状态:</span>
+    <span class="status-value" style="color:var(--accent-green)" id="dataSourceStatus">实时数据</span>
+  </div>
+
+  <!-- Platform Summary -->
+  <div class="platform-summary" id="platformSummary"></div>
+
+  <!-- 宝妈指数 -->
+  <div class="mom-index-card" id="momIndex">
+    <div class="mom-header">
+      <span class="mom-icon">👩‍👧</span>
+      <div>
+        <div class="mom-title">宝妈指数 <span style="font-size:10px;color:var(--text-muted);font-weight:400;">MOM INVEST INDEX</span></div>
+        <div class="mom-subtitle">追踪宝妈炒股圈热门板块 · ETF定投/高股息/白马股/可转债</div>
+      </div>
+      <div class="mom-score" id="momScore">--</div>
+    </div>
+    <div class="mom-sectors" id="momSectors"></div>
+  </div>
+
+  <!-- Ranking -->
+  <div class="section-title">🔥 板块ETF综合热度排行 <span style="font-size:12px;color:var(--text-muted);font-weight:400;margin-left:4px">— 社交媒体情绪 + 行情数据融合</span></div>
+  <div class="filter-bar" id="filterBar">
+    <button class="filter-btn active" data-filter="all">全部板块 <span class="count">20</span></button>
+    <button class="filter-btn" data-filter="hot">🔥 高热度 ≥ 65</button>
+    <button class="filter-btn" data-filter="bullish">📈 看多信号</button>
+    <button class="filter-btn" data-filter="bearish">📉 看空信号</button>
+    <button class="filter-btn" data-filter="buy">🟢 建议买入</button>
+  </div>
+  <div class="table-container" id="rankingTable">
+    <div class="table-header">
+      <span>排名</span><span>板块 / ETF</span><span>涨跌幅</span><span>综合热度</span><span>热度趋势</span><span>情绪</span><span>信号</span><span>舆论来源</span>
+    </div>
+    <div id="tableBody"></div>
+  </div>
+
+  <!-- Detail Panel -->
+  <div class="detail-panel">
+    <div class="detail-card" style="position:relative;">
+      <div class="detail-card-title">📈 全市场24小时情绪走势 <span class="data-tag sim">模拟数据</span></div>
+      <div class="sim-hint" style="margin-bottom:12px;"><span class="dot sim"></span>基于历史波动模型生成，非真实舆论数据</div>
+      <div class="sentiment-chart" id="sentimentChart24h"></div>
+    </div>
+    <div class="detail-card">
+      <div class="detail-card-title">🔝 实时热议话题 <span id="topicsSourceTag" class="data-tag real">实时</span></div>
+      <div class="hot-topics" id="hotTopics"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  StockHeat - 板块ETF热度雷达 v2.0
+//  实时聚合 小红书/抖音/微博 舆论热度
+// ═══════════════════════════════════════════
+
+// ─── Config ──────────────────────────────
+const SECTORS = [
+  { code:'BK0446', name:'半导体',    etf:'159995', etfName:'芯片ETF',       mkt:'sz', volatility:0.030 },
+  { code:'BK0447', name:'人工智能',  etf:'159819', etfName:'人工智能ETF',   mkt:'sz', volatility:0.032 },
+  { code:'BK0465', name:'新能源车',  etf:'515030', etfName:'新能源车ETF',   mkt:'sh', volatility:0.026 },
+  { code:'BK0458', name:'光伏',      etf:'159857', etfName:'光伏ETF',       mkt:'sz', volatility:0.034 },
+  { code:'BK0485', name:'国防军工',  etf:'512660', etfName:'军工ETF',       mkt:'sh', volatility:0.022 },
+  { code:'BK0448', name:'5G通信',    etf:'515050', etfName:'通信ETF',       mkt:'sh', volatility:0.024 },
+  { code:'BK0477', name:'生物医药',  etf:'512290', etfName:'医药ETF',       mkt:'sh', volatility:0.026 },
+  { code:'BK0460', name:'白酒消费',  etf:'512690', etfName:'酒ETF',         mkt:'sh', volatility:0.028 },
+  { code:'BK0490', name:'机器人',    etf:'562500', etfName:'机器人ETF',     mkt:'sh', volatility:0.040 },
+  { code:'BK0469', name:'锂电池',    etf:'159840', etfName:'锂电池ETF',     mkt:'sz', volatility:0.030 },
+  { code:'BK0452', name:'银行',      etf:'512800', etfName:'银行ETF',       mkt:'sh', volatility:0.014 },
+  { code:'BK0451', name:'证券',      etf:'512880', etfName:'证券ETF',       mkt:'sh', volatility:0.024 },
+  { code:'BK0459', name:'医药医疗',  etf:'512010', etfName:'医疗ETF',       mkt:'sh', volatility:0.022 },
+  { code:'BK0470', name:'消费电子',  etf:'159732', etfName:'消费电子ETF',   mkt:'sz', volatility:0.028 },
+  { code:'BK0492', name:'低空经济',  etf:'563300', etfName:'低空经济ETF',   mkt:'sh', volatility:0.042 },
+  { code:'BK0488', name:'算力',      etf:'516510', etfName:'云计算ETF',     mkt:'sh', volatility:0.038 },
+  { code:'BK0462', name:'电力',      etf:'159611', etfName:'电力ETF',       mkt:'sz', volatility:0.018 },
+  { code:'BK0481', name:'创新药',    etf:'159992', etfName:'创新药ETF',     mkt:'sz', volatility:0.028 },
+  { code:'BK0493', name:'数据要素',  etf:'516000', etfName:'大数据ETF',     mkt:'sh', volatility:0.034 },
+  { code:'BK0491', name:'固态电池',  etf:'588330', etfName:'科创50ETF',     mkt:'sh', volatility:0.036 },
+];
+
+// ─── 宝妈指数配置（宝妈炒股偏好板块）─────────
+const MOM_SECTORS = [
+  { id:'mom_etf',      name:'ETF基金',    icon:'📊', keywords:['ETF','指数基金','定投','宽基','沪深300','中证500','科创50','创业板','纳指','红利','低波','网格交易'], color:'#ff69b4' },
+  { id:'mom_dividend', name:'高股息',      icon:'💰', keywords:['高股息','分红','股息率','银行股','工行','建行','招行','农行','中行','长江电力','神华','大秦铁路','红利指数'], color:'#ffd700' },
+  { id:'mom_baijiu',   name:'白酒消费',    icon:'🍶', keywords:['茅台','五粮液','白酒','泸州老窖','汾酒','洋河','古井','口子窖','迎驾','舍得','水井坊'], color:'#fbc2eb' },
+  { id:'mom_medical',  name:'医药医疗',    icon:'💊', keywords:['医药','恒瑞','药明','迈瑞','片仔癀','云南白药','同仁堂','爱尔眼科','通策','智飞','长春高新'], color:'#a6c1ee' },
+  { id:'mom_beauty',   name:'医美消费',    icon:'💄', keywords:['医美','爱美客','华熙生物','昊海生科','华东医药','朗姿','美容','玻尿酸','胶原蛋白','整形'], color:'#ff85a2' },
+  { id:'mom_newenergy',name:'新能源',      icon:'⚡', keywords:['新能源','比亚迪','宁德时代','隆基','阳光电源','通威','亿纬','特斯拉','充电桩','光伏','风电'], color:'#84fab0' },
+  { id:'mom_gold',     name:'黄金避险',    icon:'🥇', keywords:['黄金','金价','黄金ETF','周大福','老凤祥','中国黄金','山东黄金','紫金矿业','避险','保值','降息'], color:'#ffb6c1' },
+  { id:'mom_insurance',name:'保险银行',    icon:'🏦', keywords:['保险','平安','太保','人保','新华','银行','招行','兴业','存款','降息','降准','理财','年金'], color:'#a18cd1' },
+  { id:'mom_home',     name:'家电家居',    icon:'🏠', keywords:['家电','格力','美的','海尔','老板','苏泊尔','扫地机','洗碗机','智能家居','以旧换新','家电补贴'], color:'#fad0c4' },
+  { id:'mom_bond',     name:'可转债打新',  icon:'🎫', keywords:['可转债','打新','转债','新债','打新债','配债','可转债打新','中签','上市','破发'], color:'#ff9a9e' },
+];
+
+const MOM_SIGNALS = {
+  high:   { text:'🔥 宝妈投资圈热度爆表！高股息+消费龙头受追捧，跟风情绪浓厚，注意追高风险', color:'#ff69b4', bg: 'rgba(255,105,180,0.1)' },
+  medium: { text:'📊 宝妈投资情绪正常，关注ETF定投+白马股机会，建议分散配置', color:'#ffb6c1', bg: 'rgba(255,182,193,0.08)' },
+  low:    { text:'❄️ 宝妈投资情绪低迷，市场恐慌时反而是定投好时机，保持耐心', color:'#8888a4', bg: 'rgba(255,255,255,0.04)' },
+};
+
+const PLATFORM_KEYWORDS = {
+  xiaohongshu: [
+    '抄底了','暴涨','吃肉了','离场','起飞','梭哈','满仓','清仓',
+    '这个板块','强烈推荐','不要碰','机会来了','见顶了','布局','定投','加仓',
+  ],
+  douyin: [
+    '重大利好','涨停','跌停','国家队','趋势','突破','反转','牛市',
+    '快上车','目标价','推荐','避雷','机会','主线','龙头','妖股',
+  ],
+  weibo: [
+    '市场','政策','利好','利空','牛市来了','熊市','加仓','减仓',
+    '热搜','涨停潮','股灾','抄底','逃顶','热门板块','资金流入','资金流出',
+  ],
+};
+
+const TOPIC_KEYWORDS = [
+  'AI大模型重大突破','芯片国产替代加速','新能源补贴政策','光伏出海订单暴增',
+  '人形机器人量产落地','低空经济试点扩大','5.5G商用部署','自动驾驶L3获批',
+  '算力需求日增','固态电池技术突破','医药集采政策缓和','消费电子全球复苏',
+  '军工订单超预期','数据资产正式入表','电力市场化改革','创新药FDA获批',
+  '券商合并传闻再起','白酒消费旺季来临','锂矿价格触底反弹','银行存款利率下调',
+];
+
+let marketIndices = {
+  sh: { name:'上证指数', price:3356.28, change:0 },
+  sz: { name:'深证成指', price:10842.67, change:0 },
+  cy: { name:'创业板指', price:2189.34, change:0 },
+  kc: { name:'科创50',  price:905.12,  change:0 },
+};
+
+let etfRealData = {};
+let countdown = 30;
+let dataSrcReal = false;
+let weiboRealData = null;
+let douyinRealData = null;
+let backendAvailable = false;
+
+// ─── Utilities ────────────────────────────
+function hash(str) { let h=0; for(let i=0;i<str.length;i++){h=((h<<5)-h)+str.charCodeAt(i);h|=0;} return Math.abs(h); }
+function srand(seed){ let s=seed; return ()=>{ s=(s*16807+0)%2147483647; return (s-1)/2147483646; }; }
+
+// ─── Backend API (local server) ───────────
+async function fetchBackendData() {
+  try {
+    const resp = await fetch('http://localhost:3456/api/stockheat', { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    backendAvailable = true;
+
+    // Apply real index data
+    if (data.indices) {
+      if (data.indices.sh) { marketIndices.sh.price = data.indices.sh.price; marketIndices.sh.change = data.indices.sh.change; }
+      if (data.indices.sz) { marketIndices.sz.price = data.indices.sz.price; marketIndices.sz.change = data.indices.sz.change; }
+      if (data.indices.cy) { marketIndices.cy.price = data.indices.cy.price; marketIndices.cy.change = data.indices.cy.change; }
+      if (data.indices.kc) { marketIndices.kc.price = data.indices.kc.price; marketIndices.kc.change = data.indices.kc.change; }
+      dataSrcReal = true;
+    }
+
+    // Apply real ETF data
+    if (data.sectorData) {
+      data.sectorData.forEach(s => {
+        etfRealData[s.etf] = { price: s.etfPrice, change: s.priceChange, name: s.etfName };
+      });
+    }
+
+    // Apply real Weibo data from backend
+    if (data.weiboTopics && data.weiboTopics.length > 0) {
+      weiboRealData = data.weiboTopics.map(t => ({
+        rank: t.rank,
+        name: t.name,
+        heat: t.heat,
+        source: 'weibo',
+      }));
+      console.log(`[StockHeat] 后端获取到 ${weiboRealData.length} 条微博热搜`);
+    }
+
+    // Apply real Douyin data from backend
+    if (data.douyinTopics && data.douyinTopics.length > 0) {
+      douyinRealData = data.douyinTopics.map(t => ({
+        rank: t.rank,
+        name: t.name,
+        heat: t.heat,
+        source: 'douyin',
+      }));
+      console.log(`[StockHeat] 后端获取到 ${douyinRealData.length} 条抖音热搜`);
+    }
+
+    // Store backend sector sentiment
+    if (data.sectorData) {
+      window._backendSectorData = data.sectorData;
+    }
+
+    // Store real stock-related topics
+    if (data.stockRelatedTopics) {
+      window._backendTopics = data.stockRelatedTopics;
+    }
+
+    return data;
+  } catch (e) {
+    backendAvailable = false;
+    return null;
+  }
+}
+
+// ─── Sector Keyword Mapping ───────────────
+const SECTOR_KEYWORDS = {
+  '半导体':    ['芯片','半导体','光刻机','光刻胶','晶圆','华为','海思','中芯','台积电','英伟达','GPU','CPU','存储','HBM','先进封装','EDA','RISC-V','ARM','英特尔','AMD','高通','博通'],
+  '人工智能':  ['AI','人工智能','大模型','GPT','ChatGPT','Claude','Gemini','文心一言','通义千问','智谱','深度学习','神经网络','AIGC','OpenAI','Copilot','智能体','Agent','强化学习','transformer','多模态','Sora'],
+  '新能源车':  ['新能源','电动车','特斯拉','比亚迪','蔚来','理想','小鹏','问界','小米汽车','充电桩','换电','固态电池','锂电池','宁德时代','锂矿','碳酸锂','车路云','自动驾驶','FSD','NOA','智能驾驶'],
+  '光伏':      ['光伏','太阳能','隆基','通威','晶科','天合','硅料','硅片','钙钛矿','HJT','TOPCon','BC电池','风光','绿电','储能','逆变器','阳光电源'],
+  '国防军工':  ['军工','国防','导弹','卫星','航天','航空','战机','航母','驱逐舰','雷达','兵工','军贸','军事','演习','台海','南海','火箭军','无人机','巡飞弹'],
+  '5G通信':    ['5.5G','6G','通信','华为','中兴','基站','光通信','光模块','CPO','光纤','卫星通信','低轨卫星','星链','北斗','物联网','工业互联网','量子通信'],
+  '生物医药':  ['生物医药','创新药','CXO','药明','恒瑞','百济','PD-1','ADC','双抗','基因','细胞治疗','CAR-T','减肥药','GLP-1','司美格鲁肽','阿尔茨海默','疫苗','mRNA'],
+  '白酒消费':  ['白酒','茅台','五粮液','泸州老窖','汾酒','消费','食品','餐饮','旅游','免税','医美','化妆品','家电','618','双十一','直播带货'],
+  '机器人':    ['机器人','人形机器人','具身智能','优必选','特斯拉Optimus','Figure','智元','宇树','减速器','伺服','传感器','机器狗','外骨骼','自动化','无人工厂'],
+  '锂电池':    ['锂电池','锂矿','碳酸锂','氢氧化锂','宁德时代','比亚迪','亿纬锂能','国轩','正极','负极','电解液','隔膜','固态电池','钠电池','锂回收'],
+  '银行':      ['银行','降息','降准','利率','LPR','高股息','分红','工农中建','招行','存款','贷款','房贷','不良率','净息差','财政部注资','特别国债'],
+  '证券':      ['券商','证券','中信','华泰','合并','IPO','注册制','印花税','量化','两融','融资融券','ETF','做市','T+0','做空','转融通','汇金','证金'],
+  '医药医疗':  ['医药','集采','医保','中药','医疗器械','迈瑞','联影','DRG','DIP','医疗服务','连锁药店','互联网医疗','AI医疗','基因检测','体外诊断'],
+  '消费电子':  ['消费电子','苹果','华为','小米','OPPO','vivo','折叠屏','MR','AR','VR','VisionPro','iPhone','耳机','手表','PC','面板','OLED','MiniLED','MicroLED'],
+  '低空经济':  ['低空经济','飞行汽车','eVTOL','无人机','通航','低空','空管','亿航','峰飞','小鹏汇天','适航','起降场','城市空中交通','物流无人机'],
+  '算力':      ['算力','数据中心','服务器','GPU','英伟达','昇腾','寒武纪','光模块','CPO','液冷','东数西算','云计算','边缘计算','AIDC','超算','智算中心'],
+  '电力':      ['电力','电网','特高压','风电','光伏','核电','火电','水电','虚拟电厂','抽水蓄能','电力改革','电改','电价','国家电网','南网','配电网','变压器'],
+  '创新药':    ['创新药','新药','FDA','NDA','临床','License','授权','药明','百济','康方','信达','科伦','荣昌','和黄','出海','BD','First-in-class','Best-in-class'],
+  '数据要素':  ['数据要素','数据资产','数据交易','数据确权','数据入表','大数据','数据安全','隐私计算','数据湖','数据治理','数据标注','合成数据','人民数据'],
+  '固态电池':  ['固态电池','硫化物','氧化物','聚合物','电解质','清陶','蔚蓝','辉能','QuantumScape','丰田','宁德时代','比亚迪','全固态','半固态','凝聚态'],
+};
+
+const SENTIMENT_KEYWORDS = {
+  bullish: ['突破','暴涨','大涨','利好','爆发','起飞','新高','超预期','增长','复苏','加速','落地','量产','放量','中标','获批','通过','补贴','扶持','加仓','增持','买入','回购','分红','扩产','订单','签约','出海','全球化'],
+  bearish: ['崩跌','暴跌','大跌','利空','暴雷','破产','违约','处罚','调查','制裁','限制','禁令','退市','亏损','下滑','萎缩','推迟','取消','减产','裁员','减仓','减持','卖出','跑路','踩踏','崩盘','造假','诉讼','索赔','暴雷'],
+};
+
+function matchSectorToTopic(topic, heatValue) {
+  const results = [];
+  for (const [sector, keywords] of Object.entries(SECTOR_KEYWORDS)) {
+    let maxScore = 0;
+    for (const kw of keywords) {
+      if (topic.includes(kw)) {
+        // Longer keyword match = higher score
+        const score = kw.length / topic.length * 100;
+        maxScore = Math.max(maxScore, score);
+      }
+    }
+    if (maxScore > 0) {
+      // Determine sentiment from topic text
+      let sentiment = 0.5; // neutral
+      for (const bk of SENTIMENT_KEYWORDS.bullish) {
+        if (topic.includes(bk)) { sentiment = 0.75; break; }
+      }
+      for (const bk of SENTIMENT_KEYWORDS.bearish) {
+        if (topic.includes(bk)) { sentiment = 0.25; break; }
+      }
+      results.push({
+        sector,
+        relevance: parseFloat((maxScore * (heatValue / 10000000)).toFixed(2)),
+        sentiment,
+        topic,
+        heatValue,
+      });
+    }
+  }
+  return results;
+}
+
+async function fetchWeiboHotSearch() {
+  // Try multiple CORS proxies for reliability
+  const proxyUrls = [
+    'https://api.allorigins.win/raw?url=',
+  ];
+  const targetUrl = 'https://tophub.today/n/KqndgxeLl9';
+
+  for (const proxy of proxyUrls) {
+    try {
+      const resp = await fetch(proxy + encodeURIComponent(targetUrl), {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!resp.ok) continue;
+      const html = await resp.text();
+
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const allTds = doc.querySelectorAll('td');
+      const topics = [];
+
+      for (let i = 0; i < allTds.length - 2; i++) {
+        const rankTd = allTds[i].textContent.trim();
+        const rankMatch = rankTd.match(/^(\d+)\.$/);
+        if (rankMatch) {
+          const name = allTds[i + 1].textContent.trim();
+          const heatStr = allTds[i + 2].textContent.trim();
+          const heatMatch = heatStr.match(/^([\d.]+)万$/);
+          if (name && heatMatch && name.length > 0 && name.length < 100) {
+            const heat = parseFloat(heatMatch[1]) * 10000;
+            const rank = parseInt(rankMatch[1]);
+            topics.push({ rank, name, heat, source: 'weibo' });
+          }
+          i += 2;
+        }
+      }
+
+      if (topics.length > 0) {
+        weiboRealData = topics;
+        console.log(`[StockHeat] 获取到 ${topics.length} 条微博热搜 (via ${proxy.slice(8, 30)}...)`);
+        return topics;
+      }
+    } catch (e) {
+      console.warn('[StockHeat] 代理 ' + proxy.slice(8, 30) + '... 失败:', e.message);
+      continue;
+    }
+  }
+
+  if (!weiboRealData) {
+    console.warn('[StockHeat] 所有微博数据源不可用，使用模拟数据');
+  }
+  return null;
+}
+
+// ─── Douyin Hot Search ────────────────────
+async function fetchDouyinHotSearch() {
+  // Try to fetch Douyin hot search data via CORS proxy
+  try {
+    const proxyUrl = 'https://api.allorigins.win/raw?url=';
+    const targetUrl = 'https://tophub.today/n/G47o8weMmN'; // 抖音热榜
+    const resp = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return null;
+    const html = await resp.text();
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const allTds = doc.querySelectorAll('td');
+    const topics = [];
+
+    for (let i = 0; i < allTds.length - 2; i++) {
+      const rankTd = allTds[i].textContent.trim();
+      const rankMatch = rankTd.match(/^(\d+)\.$/);
+      if (rankMatch) {
+        const name = allTds[i + 1].textContent.trim();
+        const heatStr = allTds[i + 2].textContent.trim();
+        const heatMatch = heatStr.match(/^([\d.]+)万$/);
+        if (name && heatMatch && name.length > 0 && name.length < 100) {
+          const heat = parseFloat(heatMatch[1]) * 10000;
+          topics.push({ rank: parseInt(rankMatch[1]), name, heat, source: 'douyin' });
+        }
+        i += 2;
+      }
+    }
+
+    if (topics.length > 0) {
+      douyinRealData = topics;
+      console.log(`[StockHeat] 获取到 ${topics.length} 条抖音热搜`);
+      return topics;
+    }
+  } catch (e) {
+    // Douyin fetch failed, will fall back to simulation
+  }
+  return null;
+}
+
+// ─── Real API ────────────────────────────
+async function fetchMarketIndices() {
+  try {
+    const url = 'https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids=1.000001,0.399001,0.399006,1.000688&fields=f2,f3,f4,f12';
+    const r = await fetch(url);
+    const j = await r.json();
+    if (j.data?.diff) {
+      const map = { '000001':'sh','399001':'sz','399006':'cy','000688':'kc' };
+      j.data.diff.forEach(item => {
+        const k = map[item.f12];
+        if (k && marketIndices[k]) {
+          marketIndices[k].price = item.f2;
+          marketIndices[k].change = item.f3;
+        }
+      });
+      dataSrcReal = true;
+    }
+  } catch(e) { /* fallback */ }
+}
+
+async function fetchETFData() {
+  const allCodes = SECTORS.map(s => `${s.mkt==='sh'?'1':'0'}.${s.etf}`);
+  try {
+    // Fetch in batches of 20
+    const batch = allCodes.slice(0, 20).join(',');
+    const url = `https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids=${batch}&fields=f2,f3,f4,f12,f14`;
+    const r = await fetch(url);
+    const j = await r.json();
+    if (j.data?.diff) {
+      j.data.diff.forEach(item => {
+        etfRealData[item.f12] = {
+          price: item.f2,
+          change: item.f3,
+          name: item.f14,
+        };
+      });
+    }
+  } catch(e) { /* fallback */ }
+}
+
+// ─── Sentiment Engine ───────────────────
+function genSentiment(sectorName, platform, ts) {
+  // Check for real data from this platform
+  const realData = platform === 'weibo' ? weiboRealData : platform === 'douyin' ? douyinRealData : null;
+
+  if (realData && realData.length > 0) {
+    const sectorKwMap = SECTOR_KEYWORDS[sectorName] || [];
+    let matchedTopics = 0;
+    let weightedSentiment = 0.5;
+    let totalHeatInfluence = 0;
+
+    for (const topic of realData) {
+      for (const kw of sectorKwMap) {
+        if (topic.name.includes(kw)) {
+          matchedTopics++;
+          let topicSent = 0.5;
+          for (const bk of SENTIMENT_KEYWORDS.bullish) {
+            if (topic.name.includes(bk)) { topicSent = 0.75; break; }
+          }
+          for (const bk of SENTIMENT_KEYWORDS.bearish) {
+            if (topic.name.includes(bk)) { topicSent = 0.25; break; }
+          }
+          const influence = (Math.min(topic.rank, 51) ? (51 - topic.rank) / 50 : 0);
+          totalHeatInfluence += topic.heat * Math.max(0, influence);
+          weightedSentiment = weightedSentiment * 0.7 + topicSent * 0.3;
+          break;
+        }
+      }
+    }
+
+    if (matchedTopics > 0) {
+      return {
+        mentions: Math.floor(totalHeatInfluence * 0.1 + 100),
+        bullishRatio: parseFloat(weightedSentiment.toFixed(3)),
+        intensity: 0.7 + matchedTopics * 0.05,
+        realData: true,
+      };
+    }
+  }
+
+  // Fall back to simulation (using real market context for better accuracy)
+  const seed = hash(sectorName + '_' + platform) + Math.floor(ts / 90000);
+  const rng = srand(seed);
+
+  const bias = { xiaohongshu:{bull:0.54, vol:1.3}, douyin:{bull:0.49, vol:1.6}, weibo:{bull:0.46, vol:1.0} };
+  const pb = bias[platform];
+
+  // Market context influence: if market is down, sentiment skews more bearish
+  const mktAvgChange = (marketIndices.sh.change + marketIndices.sz.change + marketIndices.cy.change + marketIndices.kc.change) / 4;
+  const mktBias = mktAvgChange > 1 ? 0.1 : mktAvgChange < -1 ? -0.1 : 0;
+
+  const eventSpike = (ts % 300000 < 60000) ? 1.5 : 1.0;
+  const baseVol = 80 + rng() * 900 * pb.vol * eventSpike;
+  const bullRatio = Math.min(0.92, Math.max(0.08, pb.bull + mktBias + (rng() - 0.5) * 0.45));
+  const intensity = 0.55 + rng() * 0.45;
+
+  return {
+    mentions: Math.floor(baseVol),
+    bullishRatio: parseFloat(bullRatio.toFixed(3)),
+    intensity: parseFloat(intensity.toFixed(2)),
+    realData: false,
+  };
+}
+
+function calcHeatScore(sentiments, priceChg) {
+  let totalW=0, sentW=0;
+  for (const [plat, d] of Object.entries(sentiments)) {
+    const w = plat==='douyin' ? 0.4 : plat==='weibo' ? 0.3 : 0.3;
+    totalW += d.mentions * w;
+    sentW += d.bullishRatio * d.intensity * w;
+  }
+  const mentionSc = Math.min(100, (Math.log10(totalW+1) / Math.log10(2500)) * 100);
+  const sentSc = sentW * 100;
+  const momSc = Math.min(100, Math.max(0, (priceChg + 5) * 10));
+  let comp = mentionSc * 0.28 + sentSc * 0.42 + momSc * 0.30;
+  comp += (Math.random() - 0.5) * 6;
+  return Math.min(100, Math.max(0, Math.round(comp)));
+}
+
+function getSignal(heat, chg, sent) {
+  if (heat >= 78 && chg > 0 && sent > 0.6)  return {sig:'buy',   txt:'强烈买入', lvl:3};
+  if (heat >= 65 && chg > -1 && sent > 0.5) return {sig:'watch', txt:'建议关注', lvl:2};
+  if (heat >= 48 && sent > 0.44)             return {sig:'hold',  txt:'持有观察', lvl:1};
+  if (heat < 38 || (chg < -3.5 && sent < 0.38)) return {sig:'sell', txt:'建议回避', lvl:-1};
+  return {sig:'hold', txt:'观望', lvl:0};
+}
+
+function getLevel(sc) { return sc>=80?5:sc>=65?4:sc>=50?3:sc>=35?2:1; }
+function getLevelClass(sc) { return 's'+(sc>=80?5:sc>=65?4:sc>=50?3:sc>=35?2:1); }
+
+// ─── Generate Data ──────────────────────
+function generateData(ts) {
+  const data = SECTORS.map(s => {
+    const rng = srand(hash(s.code + Math.floor(ts/120000)));
+
+    // Price change: prioritize real ETF data
+    let priceChg = 0;
+    if (etfRealData[s.etf]) {
+      priceChg = etfRealData[s.etf].change;
+    } else {
+      const trends = {
+        '半导体':0.4,'人工智能':0.6,'新能源车':-0.1,'光伏':-0.2,'国防军工':0.1,
+        '5G通信':0.25,'生物医药':-0.3,'白酒消费':0.05,'机器人':0.65,'锂电池':-0.05,
+        '银行':0.2,'证券':-0.1,'医药医疗':-0.25,'消费电子':0.2,'低空经济':0.85,
+        '算力':0.75,'电力':0.15,'创新药':-0.15,'数据要素':0.45,'固态电池':0.55,
+      };
+      const base = (trends[s.name] || 0);
+      priceChg = parseFloat((base*2 + (rng()-0.5)*s.volatility*10).toFixed(2));
+    }
+
+    const sentiments = {};
+    for (const p of ['xiaohongshu','douyin','weibo']) {
+      sentiments[p] = genSentiment(s.name, p, ts);
+    }
+
+    const heat = calcHeatScore(sentiments, priceChg);
+    const avgSent = (sentiments.xiaohongshu.bullishRatio + sentiments.douyin.bullishRatio + sentiments.weibo.bullishRatio) / 3;
+    const totalMent = sentiments.xiaohongshu.mentions + sentiments.douyin.mentions + sentiments.weibo.mentions;
+    const signal = getSignal(heat, priceChg, avgSent);
+
+    return { ...s, priceChg, sentiments, heat, avgSent:parseFloat(avgSent.toFixed(3)), totalMent, signal };
+  });
+  data.sort((a,b) => b.heat - a.heat);
+  return data;
+}
+
+function genHotTopics(ts) {
+  const allTopics = [];
+
+  // Add real Weibo topics
+  if (weiboRealData && weiboRealData.length > 0) {
+    const stockRelated = weiboRealData
+      .filter(t => {
+        const allKw = Object.values(SECTOR_KEYWORDS).flat();
+        return allKw.some(kw => t.name.includes(kw)) ||
+          SENTIMENT_KEYWORDS.bullish.some(bk => t.name.includes(bk)) ||
+          SENTIMENT_KEYWORDS.bearish.some(bk => t.name.includes(bk));
+      })
+      .map(t => ({
+        keyword: t.name, heat: Math.min(99, Math.floor(t.heat / 10000 * 3)),
+        platform: 'weibo', mentions: Math.floor(t.heat),
+      }));
+    allTopics.push(...stockRelated);
+  }
+
+  // Add real Douyin topics
+  if (douyinRealData && douyinRealData.length > 0) {
+    const stockRelated = douyinRealData
+      .filter(t => {
+        const allKw = Object.values(SECTOR_KEYWORDS).flat();
+        return allKw.some(kw => t.name.includes(kw)) ||
+          SENTIMENT_KEYWORDS.bullish.some(bk => t.name.includes(bk)) ||
+          SENTIMENT_KEYWORDS.bearish.some(bk => t.name.includes(bk));
+      })
+      .map(t => ({
+        keyword: t.name, heat: Math.min(99, Math.floor(t.heat / 10000 * 3)),
+        platform: 'douyin', mentions: Math.floor(t.heat),
+      }));
+    allTopics.push(...stockRelated);
+  }
+
+  if (allTopics.length >= 3) {
+    return allTopics.sort((a, b) => b.mentions - a.mentions).slice(0, 8);
+  }
+
+  // Show top real topics from either platform
+  if (weiboRealData && weiboRealData.length > 0) {
+    return weiboRealData.slice(0, 8).map(t => ({
+      keyword: t.name, heat: Math.min(99, Math.floor(t.heat / 10000 * 3)),
+      platform: 'weibo', mentions: Math.floor(t.heat),
+    }));
+  }
+  if (douyinRealData && douyinRealData.length > 0) {
+    return douyinRealData.slice(0, 8).map(t => ({
+      keyword: t.name, heat: Math.min(99, Math.floor(t.heat / 10000 * 3)),
+      platform: 'douyin', mentions: Math.floor(t.heat),
+    }));
+  }
+
+  // Fallback simulation
+  const rng = srand(Math.floor(ts/60000));
+  return TOPIC_KEYWORDS
+    .map((kw,i) => ({
+      keyword:kw, heat:Math.floor(55+rng()*45),
+      platform:['xiaohongshu','douyin','weibo'][Math.floor(rng()*3)],
+      mentions:Math.floor(800+rng()*10000),
+    }))
+    .sort((a,b)=>b.heat-a.heat).slice(0,8);
+}
+
+function genSentChart(ts) {
+  const data = [];
+  for (let i=0;i<24;i++) {
+    const rng = srand((Math.floor(ts/300000)*24+i)*7);
+    data.push({pos:Math.floor(35+rng()*45), neg:Math.floor(8+rng()*35)});
+  }
+  return data;
+}
+
+// ─── Render ─────────────────────────────
+function renderChart(ts) {
+  const c = document.getElementById('sentimentChart24h');
+  const d = genSentChart(ts);
+  c.innerHTML = d.map(v=>{
+    const t = v.pos+v.neg, pp = (v.pos/t)*100;
+    return `<div class="chart-col">
+      <div class="chart-bar positive" style="height:${pp}%"></div>
+      <div class="chart-bar negative" style="height:${100-pp}%"></div>
+    </div>`;
+  }).join('');
+}
+
+function renderTopics(ts) {
+  const c = document.getElementById('hotTopics');
+  const topics = genHotTopics(ts);
+  const hasReal = topics.some(t => t.platform === 'weibo' || t.platform === 'douyin');
+  const tag = document.getElementById('topicsSourceTag');
+  if (tag) {
+    tag.textContent = hasReal ? '实时' : '模拟';
+    tag.className = 'data-tag ' + (hasReal ? 'real' : 'sim');
+  }
+  c.innerHTML = topics.map((t,i)=>{
+    const pn = t.platform==='xiaohongshu'?'小红书':t.platform==='douyin'?'抖音':'微博';
+    const pc = t.platform==='xiaohongshu'?'var(--xhs-color)':t.platform==='douyin'?'var(--dy-color)':'var(--wb-color)';
+    const realMark = (t.platform==='weibo'&&weiboRealData)||(t.platform==='douyin'&&douyinRealData) ? '' : '<span style="font-size:9px;color:#ff9100;">[模拟]</span>';
+    return `<div class="ht-item">
+      <span class="ht-rank ${i<3?'hot':''}">#${i+1}</span>
+      <span class="ht-content">${t.keyword} ${realMark}</span>
+      <span class="ht-source" style="color:${pc};border-color:${pc}33">${pn}</span>
+      <span class="ht-heat">${t.heat}°</span>
+    </div>`;
+  }).join('');
+}
+
+function renderTicker() {
+  const c = document.getElementById('marketTicker');
+  const items = [
+    {k:'sh', l:'上证'},{k:'sz', l:'深证'},{k:'cy', l:'创业板'},{k:'kc', l:'科创50'},
+  ];
+  c.innerHTML = items.map(({k,l})=>{
+    const d = marketIndices[k];
+    const up = d.change >= 0;
+    return `<div class="ticker-item">
+      <span class="ticker-name">${l}</span>
+      <span class="ticker-price">${d.price.toFixed(2)}</span>
+      <span class="ticker-change ${up?'up':'down'}">${up?'+':''}${d.change.toFixed(2)}%</span>
+    </div>`;
+  }).join('');
+}
+
+function renderPlatforms(data) {
+  const c = document.getElementById('platformSummary');
+  const platforms = {
+    xiaohongshu: {n:'小红书', ico:'📕', cls:'xhs', color:'#ff2442'},
+    douyin:      {n:'抖音',    ico:'🎵', cls:'douyin', color:'#00f2fe'},
+    weibo:       {n:'微博',    ico:'📢', cls:'weibo', color:'#ff8200'},
+  };
+
+  const cards = [];
+  for (const [key, p] of Object.entries(platforms)) {
+    const sectors = data.map(s => ({n:s.name, m:s.sentiments[key].mentions, br:s.sentiments[key].bullishRatio, real:s.sentiments[key].realData}))
+      .sort((a,b)=>b.m-a.m).slice(0,4);
+    const totalM = data.reduce((sum,s)=>sum+s.sentiments[key].mentions,0);
+    const avgM = Math.round(sectors.reduce((s,x)=>s+x.m,0)/sectors.length);
+    const hl = avgM>800?3:avgM>450?2:1;
+    const realBadge = (key === 'weibo' && weiboRealData) ? ' <span class="data-tag real">实时</span>' :
+                      (key === 'douyin' && douyinRealData) ? ' <span class="data-tag real">实时</span>' :
+                      ' <span class="data-tag sim">模拟</span>';
+
+    cards.push(`<div class="platform-card ${p.cls}">
+      <div class="platform-header">
+        <div class="platform-name"><span class="platform-icon">${p.ico}</span>${p.n}${realBadge}</div>
+        <span class="platform-count">${totalM.toLocaleString()} 条讨论</span>
+      </div>
+      <div class="platform-metrics">
+        <div class="metric-item"><div class="metric-label">平均讨论量</div><div class="metric-value h${hl}">${avgM.toLocaleString()}</div></div>
+        <div class="metric-item"><div class="metric-label">板块数</div><div class="metric-value">${data.length}</div></div>
+      </div>
+      <div class="platform-trends">
+        ${sectors.map((s,i)=>`<span class="trend-tag ${i<2?'hot':''}">${s.n}${s.real?' 📡':''}</span>`).join('')}
+      </div>
+    </div>`);
+  }
+
+  const avgHeat = Math.round(data.reduce((s,x)=>s+x.heat,0)/data.length);
+  const active = data.filter(s=>s.heat>=60).length;
+
+  // Show real Weibo topic count
+  const wbTopicCount = weiboRealData ? weiboRealData.length : data.length;
+  const wbStockRelated = weiboRealData ?
+    weiboRealData.filter(t => {
+      const allKw = Object.values(SECTOR_KEYWORDS).flat();
+      return allKw.some(kw => t.name.includes(kw));
+    }).length : 0;
+
+  cards.push(`<div class="platform-card aggregate">
+    <div class="platform-header">
+      <div class="platform-name"><span class="platform-icon">📊</span>综合热度指数</div>
+      <span class="platform-count">微博热搜 ${wbTopicCount} 条${wbStockRelated > 0 ? ` · 股票相关 ${wbStockRelated} 条` : ''}</span>
+    </div>
+    <div class="platform-metrics">
+      <div class="metric-item"><div class="metric-label">全市场热度</div>
+        <div class="metric-value ${avgHeat>60?'h2':'h1'}" style="font-size:30px;">${avgHeat}</div></div>
+      <div class="metric-item"><div class="metric-label">≥60分板块</div><div class="metric-value">${active}</div></div>
+    </div>
+    <div class="platform-trends">
+      <span class="trend-tag hot">实时监控</span><span class="trend-tag hot">多源聚合</span><span class="trend-tag">${weiboRealData ? '微博实时热搜' : 'AI模拟'}</span>
+    </div>
+  </div>`);
+
+  c.innerHTML = cards.join('');
+}
+
+let currentFilter = 'all';
+
+function filterData(data, filter) {
+  switch(filter) {
+    case 'hot':     return data.filter(s => s.heat >= 65);
+    case 'bullish': return data.filter(s => s.avgSent >= 0.6);
+    case 'bearish': return data.filter(s => s.avgSent <= 0.4);
+    case 'buy':     return data.filter(s => s.signal.sig === 'buy' || s.signal.sig === 'watch');
+    default:        return [...data];
+  }
+}
+
+function renderTable(data) {
+  const filtered = filterData(data, currentFilter);
+  const t = document.getElementById('tableBody');
+  if (filtered.length === 0) {
+    t.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted);font-size:14px;">暂无条件匹配的板块，请调整筛选条件</div>`;
+    return;
+  }
+  t.innerHTML = filtered.map((s,i)=>{
+    const rk = i+1, rc = rk<=3?`r${rk}`:'';
+    const chCls = s.priceChg>=0?'pos':'neg', chSign = s.priceChg>=0?'+':'';
+    const lv = getLevel(s.heat), lc = getLevelClass(s.heat);
+    let sBadge = '', scCls = '';
+    if (s.avgSent>=0.6) { sBadge='看多'; scCls='bullish'; }
+    else if (s.avgSent<=0.4) { sBadge='看空'; scCls='bearish'; }
+    else { sBadge='中性'; scCls='neutral'; }
+    const sig = s.signal;
+    const xhOn = (s.sentiments.xiaohongshu.realData?'real':'sim');
+    const dyOn = (s.sentiments.douyin.realData?'real':'sim');
+    const wbOn = (s.sentiments.weibo.realData?'real':'sim');
+
+    // Data source summary for tooltip
+    const realCount = [xhOn, dyOn, wbOn].filter(x => x === 'real').length;
+    const dataQualityTag = realCount >= 2 ? '<span class="data-tag real">实时</span>' :
+                           realCount === 1 ? '<span class="data-tag mixed">混合</span>' :
+                           '<span class="data-tag sim">模拟</span>';
+
+    const etfPx = etfRealData[s.etf] ? ` <span style="color:var(--accent-cyan);font-family:'Geist Mono',monospace;font-size:11px;">¥${etfRealData[s.etf].price.toFixed(3)}</span>` : '';
+
+    return `<div class="table-row slide-in" data-code="${s.code}" onclick="openDetail('${s.code}')">
+      <span class="rank-num ${rc}">#${rk}</span>
+      <div class="sector-name">${s.name} <span class="etf-name">${s.etfName}${etfPx}</span>${dataQualityTag}</div>
+      <span class="sector-change ${chCls}">${chSign}${s.priceChg.toFixed(2)}%</span>
+      <div class="heat-cell">
+        <div class="heat-bar"><div class="heat-bar-fill l${lv}" style="width:${s.heat}%"></div></div>
+        <span class="heat-score-val ${lc}">${s.heat}</span>
+      </div>
+      <span class="sector-change ${chCls}">${chSign}${Math.abs(Math.round((s.heat-50)*0.75))}% vs 5min</span>
+      <span class="sent-badge ${scCls}">${sBadge}</span>
+      <div class="signal-cell">
+        <span class="signal-dot ${sig.sig}"></span>
+        <span class="signal-label ${sig.sig}">${sig.txt}</span>
+      </div>
+      <div class="mention-dots">
+        <span class="mdot xh ${xhOn==='real'?'on':''}" title="小红书${xhOn==='real'?'(实时数据)':'(模拟数据)'}"></span>
+        <span class="mdot dy ${dyOn==='real'?'on':''}" title="抖音${dyOn==='real'?'(实时数据)':'(模拟数据)'}"></span>
+        <span class="mdot wb ${wbOn==='real'?'on':''}" title="微博${wbOn==='real'?'(实时数据)':'(模拟数据)'}"></span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─── Detail Modal ─────────────────────────
+function openDetail(code) {
+  const s = window._lastData?.find(d => d.code === code);
+  if (!s) return;
+
+  const sig = s.signal;
+  const modal = document.getElementById('modalContent');
+  modal.innerHTML = `
+    <button class="modal-close" onclick="closeDetail()">✕</button>
+    <div class="modal-sector-name">${s.name}</div>
+    <div class="modal-sector-code">${s.code} · ${s.etfName} (${s.etf})</div>
+
+    <div class="modal-grid">
+      <div class="modal-stat">
+        <div class="modal-stat-label">综合热度分</div>
+        <div class="modal-stat-value" style="color:var(--accent-orange);">${s.heat} / 100</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">ETF实时涨跌</div>
+        <div class="modal-stat-value" style="color:${s.priceChg>=0?'var(--accent-green)':'var(--accent-red)'};">
+          ${s.priceChg>=0?'+':''}${s.priceChg.toFixed(2)}%
+        </div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">综合情绪</div>
+        <div class="modal-stat-value" style="color:${s.avgSent>=0.5?'var(--accent-green)':'var(--accent-red)'};">
+          ${(s.avgSent*100).toFixed(1)}% 看多
+        </div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">交易信号</div>
+        <div class="modal-stat-value" style="color:var(--accent-${sig.sig==='buy'?'green':sig.sig==='sell'?'red':sig.sig==='watch'?'cyan':'yellow'});">
+          ${sig.txt}
+        </div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">总讨论量</div>
+        <div class="modal-stat-value">${s.totalMent.toLocaleString()}</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">讨论热度变化</div>
+        <div class="modal-stat-value" style="color:var(--accent-cyan);">
+          ${s.heat >= 60 ? '🔥 持续升温' : s.heat >= 40 ? '📊 稳定' : '❄️ 降温中'}
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-platform-breakdown">
+      <div class="modal-platform-label">各平台热度分布${weiboRealData ? ' <span style="color:#00e676;font-size:11px;">(微博数据来源：实时热搜)</span>' : ''}</div>
+      ${[
+        {p:'小红书', k:'xiaohongshu', c:'var(--xhs-color)', d:s.sentiments.xiaohongshu},
+        {p:'抖音',  k:'douyin',      c:'var(--dy-color)',   d:s.sentiments.douyin},
+        {p:'微博',  k:'weibo',       c:'var(--wb-color)',   d:s.sentiments.weibo},
+      ].map(pl=>{
+        const maxM = Math.max(s.sentiments.xiaohongshu.mentions, s.sentiments.douyin.mentions, s.sentiments.weibo.mentions);
+        const w = (pl.d.mentions/maxM*100).toFixed(0);
+        const dataTag = pl.d.realData ? ' <span style="font-size:9px;color:#00e676;">●实时</span>' : '';
+        return `<div class="modal-bar-row">
+          <span class="modal-bar-label" style="color:${pl.c}">${pl.p}${dataTag}</span>
+          <div class="modal-bar-track"><div class="modal-bar-fill" style="width:${w}%;background:${pl.c}"></div></div>
+          <span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--text-secondary);min-width:50px;text-align:right;">${pl.d.mentions.toLocaleString()}</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--text-muted);min-width:55px;text-align:right;">${(pl.d.bullishRatio*100).toFixed(0)}% 看多</span>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function closeDetail() {
+  document.getElementById('modalOverlay').classList.remove('active');
+}
+
+document.getElementById('modalOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeDetail();
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeDetail();
+});
+
+// ─── 宝妈指数 ─────────────────────────────
+function calcMomIndex() {
+  const allSocialData = { weibo: weiboRealData, douyin: douyinRealData };
+  const results = MOM_SECTORS.map(sector => {
+    let totalMentions = 0;
+    let weightedSentiment = 0.5;
+
+    for (const [platform, topics] of Object.entries(allSocialData)) {
+      if (!topics) continue;
+      for (const topic of topics) {
+        for (const kw of sector.keywords) {
+          if (topic.name && topic.name.includes(kw)) {
+            totalMentions += topic.heat || 1000;
+            let sent = 0.5;
+            for (const bk of SENTIMENT_KEYWORDS.bullish) {
+              if (topic.name.includes(bk)) { sent = 0.75; break; }
+            }
+            for (const bk of SENTIMENT_KEYWORDS.bearish) {
+              if (topic.name.includes(bk)) { sent = 0.25; break; }
+            }
+            weightedSentiment = weightedSentiment * 0.6 + sent * 0.4;
+            break;
+          }
+        }
+      }
+    }
+
+    // Simulate if no real data
+    if (totalMentions === 0) {
+      const rng = srand(hash(sector.id + Math.floor(Date.now() / 300000)));
+      totalMentions = 300 + rng() * 2000;
+      weightedSentiment = 0.35 + rng() * 0.5;
+    }
+
+    return {
+      ...sector,
+      mentions: Math.floor(totalMentions),
+      sentiment: parseFloat(weightedSentiment.toFixed(3)),
+      heat: Math.min(100, Math.floor((Math.log10(totalMentions + 1) / Math.log10(5000)) * 100)),
+    };
+  });
+
+  // Calculate composite score
+  const avgHeat = Math.round(results.reduce((s, r) => s + r.heat, 0) / results.length);
+  const avgSent = results.reduce((s, r) => s + r.sentiment, 0) / results.length;
+  const totalBuzz = results.reduce((s, r) => s + r.mentions, 0);
+
+  const signalLevel = avgHeat >= 70 ? 'high' : avgHeat >= 40 ? 'medium' : 'low';
+  const signal = MOM_SIGNALS[signalLevel];
+
+  return { sectors: results, score: avgHeat, sentiment: avgSent, totalBuzz, signal, signalLevel };
+}
+
+function renderMomIndex(ts) {
+  const data = calcMomIndex();
+  const container = document.getElementById('momIndex');
+  if (!container) return;
+
+  // Update score
+  document.getElementById('momScore').textContent = data.score;
+
+  // Update sectors
+  const sectorsHtml = data.sectors
+    .sort((a, b) => b.heat - a.heat)
+    .map(s => {
+      const heatColor = s.heat >= 70 ? 'var(--heat-hot)' : s.heat >= 45 ? 'var(--heat-warm)' : 'var(--heat-cold)';
+      return `
+        <div class="mom-sector-tag" title="${s.name}: ${s.mentions.toLocaleString()} 讨论量, ${(s.sentiment*100).toFixed(0)}% 看多">
+          <div class="mom-sector-dot" style="background:${s.color};box-shadow:0 0 6px ${s.color}"></div>
+          <span class="mom-sector-name">${s.icon} ${s.name}</span>
+          <span class="mom-sector-heat" style="color:${heatColor}">${s.heat}°</span>
+          <span class="mom-sector-arrow" style="color:${s.sentiment >= 0.5 ? 'var(--accent-green)' : 'var(--accent-red)'}">
+            ${s.sentiment >= 0.55 ? '↑' : s.sentiment <= 0.45 ? '↓' : '→'}
+          </span>
+        </div>`;
+    }).join('');
+
+  // Add signal
+  const signalHtml = data.signal ? `
+    <div class="mom-signal" style="background:${data.signal.bg};border-color:${data.signal.color}33">
+      <span style="font-size:16px;">${data.signalLevel === 'high' ? '🔥' : data.signalLevel === 'medium' ? '📊' : '❄️'}</span>
+      <span style="color:${data.signal.color};">${data.signal.text}</span>
+    </div>` : '';
+
+  // Check if mom index has any real data
+  const hasRealMomData = data.sectors.some(s => s.mentions > 500 && (weiboRealData || douyinRealData));
+  const momDataTag = hasRealMomData ? '<span class="data-tag real">部分实时</span>' : '<span class="data-tag sim">模拟</span>';
+
+  container.innerHTML = `
+    <div class="mom-header">
+      <span class="mom-icon">👩‍👧</span>
+      <div>
+        <div class="mom-title">宝妈指数 <span style="font-size:10px;color:var(--text-muted);font-weight:400;">MOM INVEST INDEX</span> ${momDataTag}</div>
+        <div class="mom-subtitle">宝妈炒股热门板块 · ${data.totalBuzz.toLocaleString()} 讨论量 · ${(data.sentiment*100).toFixed(0)}% 看多</div>
+      </div>
+      <div class="mom-score">${data.score}</div>
+    </div>
+    <div class="mom-sectors">${sectorsHtml}</div>
+    ${signalHtml}
+  `;
+}
+
+// ─── Update Loop ──────────────────────────
+let updateTimer, countdownTimer;
+
+function renderAll(ts) {
+  const data = generateData(ts);
+  window._lastData = data;
+
+  renderTicker();
+  renderMomIndex(ts);
+  renderPlatforms(data);
+  renderTable(data);
+  renderChart(ts);
+  renderTopics(ts);
+  updateFilterCounts(data);
+
+  document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('zh-CN');
+
+  const realSources = [];
+  if (dataSrcReal) realSources.push('行情');
+  if (weiboRealData) realSources.push('微博热搜');
+  if (douyinRealData) realSources.push('抖音热搜');
+  if (backendAvailable) realSources.unshift('后端');
+
+  if (backendAvailable && realSources.length >= 3) {
+    document.getElementById('dataSourceStatus').textContent = '全实时 (' + realSources.join('+') + ')';
+    document.getElementById('dataSourceStatus').style.color = '#00e676';
+  } else if (realSources.length >= 2) {
+    document.getElementById('dataSourceStatus').textContent = '实时数据 (' + realSources.join('+') + ')';
+    document.getElementById('dataSourceStatus').style.color = 'var(--accent-green)';
+  } else if (realSources.length === 1) {
+    document.getElementById('dataSourceStatus').textContent = '部分实时 (' + realSources[0] + ')';
+    document.getElementById('dataSourceStatus').style.color = 'var(--accent-yellow)';
+  } else {
+    document.getElementById('dataSourceStatus').textContent = '仿真数据';
+    document.getElementById('dataSourceStatus').style.color = 'var(--accent-yellow)';
+  }
+}
+
+async function doUpdate() {
+  countdown = 30;
+  // Try backend first, then fallback to direct API calls
+  const backendData = await fetchBackendData();
+  if (!backendData) {
+    await Promise.all([
+      fetchMarketIndices(),
+      fetchETFData(),
+      fetchWeiboHotSearch(),
+      fetchDouyinHotSearch(),
+    ]);
+  } else {
+    // Still try to get social data
+    await Promise.all([
+      fetchWeiboHotSearch(),
+      fetchDouyinHotSearch(),
+    ]);
+  }
+  renderAll(Date.now());
+}
+
+function updateCountdownUI() {
+  document.getElementById('updateCountdown').textContent = countdown + 's';
+}
+
+async function init() {
+  // Filter button handlers
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.filter;
+      if (window._lastData) {
+        renderTable(window._lastData);
+      }
+    });
+  });
+
+  // Try backend first
+  const backendData = await fetchBackendData();
+  if (!backendData) {
+    await Promise.all([
+      fetchMarketIndices(),
+      fetchETFData(),
+      fetchWeiboHotSearch(),
+      fetchDouyinHotSearch(),
+    ]);
+  } else {
+    await Promise.all([
+      fetchWeiboHotSearch(),
+      fetchDouyinHotSearch(),
+    ]);
+  }
+  renderAll(Date.now());
+
+  countdownTimer = setInterval(() => {
+    countdown--;
+    if (countdown <= 0) countdown = 0;
+    updateCountdownUI();
+  }, 1000);
+
+  updateTimer = setInterval(async () => {
+    countdown = 30;
+    const backendData = await fetchBackendData();
+    if (!backendData) {
+      await Promise.all([
+        fetchMarketIndices(),
+        fetchETFData(),
+        fetchWeiboHotSearch(),
+        fetchDouyinHotSearch(),
+      ]);
+    } else {
+      await Promise.all([
+        fetchWeiboHotSearch(),
+        fetchDouyinHotSearch(),
+      ]);
+    }
+    renderAll(Date.now());
+  }, 30000);
+}
+
+window.addEventListener('beforeunload', () => {
+  clearInterval(updateTimer);
+  clearInterval(countdownTimer);
+});
+
+init();
+</script>
+</body>
+</html>
